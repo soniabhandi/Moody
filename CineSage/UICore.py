@@ -1,11 +1,20 @@
+
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+from langchain_core.output_parsers import PydanticOutputParser
+from typing import List, Optional
+import json
 
 load_dotenv()
 
-st.set_page_config(page_title="Movie Info Extractor", page_icon="🎬", layout="centered")
+st.set_page_config(
+    page_title="Movie Info Extractor",
+    page_icon="🎬",
+    layout="centered"
+)
 
 st.markdown(
     """
@@ -28,6 +37,31 @@ html, body, [class*="css"], .stApp { font-family: 'Nunito', system-ui, sans-seri
 )
 
 
+# Pydantic schema
+class Movie(BaseModel):
+    title: Optional[str] = None
+    release_year: Optional[int] = None
+    genre: List[str]
+    director: Optional[str] = None
+    cast: List[str]
+    rating: Optional[float] = None
+    summary: str
+    language: Optional[str] = None
+    country: Optional[str] = None
+    main_characters: List[str] = []
+    themes: List[str] = []
+    setting: Optional[str] = None
+    tone: List[str] = []
+    target_audience: List[str] = []
+    content_warnings: List[str] = []
+    keywords: List[str] = []
+    missing_information: List[str] = []
+
+
+# Pydantic output parser
+parser = PydanticOutputParser(pydantic_object=Movie)
+
+
 @st.cache_resource
 def get_model():
     return ChatGroq(
@@ -38,78 +72,84 @@ def get_model():
 
 model = get_model()
 
+
 prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
             """
-        You are an expert movie information extraction assistant.
+            You are an expert movie information extraction assistant.
 
-        Your task is to extract useful movie information from the
-        movie paragraph supplied by the user.
+            Extract useful movie information from the supplied paragraph.
 
-        Follow these rules:
-        1. Extract information only from the supplied paragraph.
-        2. Never invent a movie title, actor, director, date, or fact.
-        3. If a single-value field is missing, return null.
-        4. If a list field is missing, return an empty list.
-        5. Distinguish actors from the characters they portray.
-        6. Infer genres, themes, tone, and audience only when
-           reasonably supported by the paragraph.
-        7. Write a clear summary in 2-3 sentences.
-        8. Keep the output concise and useful for a movie database.
-        9. Return only data matching the requested output schema.
+            Rules:
+            1. Extract information only from the supplied paragraph.
+            2. Never invent facts.
+            3. Use null for missing optional fields.
+            4. Use empty lists for missing list fields.
+            5. Distinguish actors from characters where possible.
+            6. Infer genres, themes, tone, and audience only when
+               reasonably supported by the paragraph.
+            7. Write a clear summary in 2-3 sentences.
+            8. List missing information in missing_information.
+            9. Follow the schema exactly.
 
-        Extract these fields:
-        - movie_name
-        - release_year
-        - genres
-        - director
-        - cast (actor and character)
-        - language
-        - country
-        - summary
-        - main_characters
-        - themes
-        - setting
-        - tone
-        - target_audience
-        - content_warnings
-        - keywords
-        - missing_information
-
-        Output format:
-        Return a valid JSON object with exactly these keys.
-        Do not include Markdown fences or explanatory text.
-        """,
+            {format_instructions}
+            """
         ),
         (
             "human",
             """
-        Extract information from this movie paragraph:
+            Extract information from this movie paragraph:
 
-        {movie_paragraph}
-
-        Return the extracted information as valid JSON.
-        """,
+            {movie_paragraph}
+            """
         ),
     ]
 )
 
-st.markdown('<div class="page-title">🎬 Movie Info Extractor</div>', unsafe_allow_html=True)
+
+st.markdown(
+    '<div class="page-title">🎬 Movie Info Extractor</div>',
+    unsafe_allow_html=True
+)
+
 st.markdown(
     '<div class="page-sub">Paste a paragraph about a movie and get structured details back.</div>',
     unsafe_allow_html=True,
 )
 
-movie = st.text_area("Give your paragraph:", height=220, placeholder="Paste the movie paragraph here…")
+movie = st.text_area(
+    "Give your paragraph:",
+    height=220,
+    placeholder="Paste the movie paragraph here…"
+)
+
 
 if st.button("Extract", type="primary"):
     if not movie.strip():
         st.warning("Please paste a paragraph first.")
     else:
         with st.spinner("Extracting…"):
-            final_prompt = prompt.invoke({"movie_paragraph": movie})
-            response = model.invoke(final_prompt)
-        st.subheader("Result")
-        st.code(response.content, language="json")
+            try:
+                final_prompt = prompt.invoke({
+                    "movie_paragraph": movie,
+                    "format_instructions":
+                        parser.get_format_instructions()
+                })
+
+                response = model.invoke(final_prompt)
+
+                # Parse and validate the LLM response
+                parsed_result = parser.parse(response.content)
+
+                # Convert Pydantic object to a dictionary
+                result_json = parsed_result.model_dump()
+
+                st.subheader("Result")
+
+                # Display formatted JSON in Streamlit
+                st.json(result_json)
+
+            except Exception as e:
+                st.error(f"Could not extract movie information: {e}")
