@@ -1,10 +1,20 @@
 import streamlit as st
 from dotenv import load_dotenv
+import os
+
 
 load_dotenv()
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+
+
+def get_groq_api_key():
+    # Streamlit Cloud uses st.secrets; local development can use .env
+    if "GROQ_API_KEY" in st.secrets:
+        return st.secrets["GROQ_API_KEY"]
+    return os.getenv("GROQ_API_KEY")
+
 
 st.set_page_config(page_title="Chatworld", page_icon="💬", layout="centered")
 
@@ -37,12 +47,28 @@ ROLES = {
 }
 
 
+# @st.cache_resource
+# def get_model():
+#     return ChatGroq(
+#         model="openai/gpt-oss-120b",
+#         temperature=0.5,
+#     )
+
+
 @st.cache_resource
 def get_model():
+    api_key = get_groq_api_key()
+
+    if not api_key:
+        st.error("GROQ_API_KEY is missing. Add it to Streamlit Secrets or your local .env file.")
+        st.stop()
+
     return ChatGroq(
         model="openai/gpt-oss-120b",
         temperature=0.5,
+        api_key=api_key,
     )
+
 
 
 model = get_model()
