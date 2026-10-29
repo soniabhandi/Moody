@@ -1,0 +1,3 @@
+.venv
+.env
+# .\.venv\Scripts\python.exe -m pip install streamlit
