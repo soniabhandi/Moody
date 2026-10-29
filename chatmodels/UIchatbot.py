@@ -1,20 +1,21 @@
 import streamlit as st
-from dotenv import load_dotenv
 import os
 
 
-load_dotenv()
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 
 
 def get_groq_api_key():
-    # Streamlit Cloud uses st.secrets; local development can use .env
-    if "GROQ_API_KEY" in st.secrets:
-        return st.secrets["GROQ_API_KEY"]
-    return os.getenv("GROQ_API_KEY")
+    try:
+        api_key = st.secrets.get("GROQ_API_KEY")
+        if api_key:
+            return api_key
+    except (FileNotFoundError, RuntimeError):
+        pass
 
+    return os.getenv("GROQ_API_KEY")
 
 st.set_page_config(page_title="Chatworld", page_icon="💬", layout="centered")
 
@@ -189,10 +190,21 @@ if prompt := st.chat_input(f"Message the {role.lower()} AI"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # with st.chat_message("assistant", avatar=cfg["emoji"]):
+    #     with st.spinner("Thinking…"):
+    #         chat_model = model.invoke(st.session_state.messages)
+    #     st.markdown(chat_model.content)
+
     with st.chat_message("assistant", avatar=cfg["emoji"]):
         with st.spinner("Thinking…"):
-            chat_model = model.invoke(st.session_state.messages)
-        st.markdown(chat_model.content)
+            try:
+                chat_model = model.invoke(st.session_state.messages)
+                st.markdown(chat_model.content)
+                st.session_state.messages.append(
+                    AIMessage(content=chat_model.content)
+                )
+            except Exception:
+                st.error("Sorry, I couldn't get a response. Please try again.")
 
     st.session_state.messages.append(AIMessage(content=chat_model.content))
     st.rerun()
