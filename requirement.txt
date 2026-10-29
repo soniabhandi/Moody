@@ -1,3 +1,4 @@
+
 langchain
 langchain-core
 langchain-community
@@ -5,10 +6,12 @@ langgraph
 langchain-google-genai
 langchain-groq
 langchain-mistralai
+langchain-huggingface
 python-dotenv
+sentence-transformers
+streamlit
 faiss-cpu
 tiktoken
 fastapi
 uvicorn
 requests
-langchain_huggingface
